@@ -20,41 +20,9 @@ namespace FishNet.Serializing
 {
 
     /// <summary>
-    /// Used for write references to generic types.
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    [APIExclude]
-    public static class GenericWriter<T>
-    {
-        public static Action<Writer, T> Write { get; private set; }
-        public static Action<Writer, T, AutoPackType> WriteAutoPack { get; private set; }
-        /// <summary>
-        /// True if this type has a custom writer.
-        /// </summary>
-        private static bool _hasCustomSerializer;
-
-        public static void SetWriteUnpacked(Action<Writer, T> value)
-        {
-            /* If a custom serializer has already been set then exit method
-             * to not overwrite serializer. */
-            if (_hasCustomSerializer)
-                return;
-
-            //Set has custom serializer if value being used is not a generated method.
-            _hasCustomSerializer = !(value.Method.Name.StartsWith(UtilityConstants.GENERATED_WRITER_PREFIX));
-            Write = value;
-        }
-
-        public static void SetWriteAutoPacked(Action<Writer, T, AutoPackType> value)
-        {
-            WriteAutoPack = value;
-        }
-    }
-
-    /// <summary>
     /// Writes data to a buffer.
     /// </summary>
-    public class Writer
+    public partial class Writer
     {
         #region Public.
         /// <summary>
@@ -536,11 +504,8 @@ namespace FishNet.Serializing
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteVector2(Vector2 value)
         {
-            UIntFloat converter;
-            converter = new UIntFloat { FloatValue = value.x };
-            WriteUInt32(converter.UIntValue, AutoPackType.Unpacked);
-            converter = new UIntFloat { FloatValue = value.y };
-            WriteUInt32(converter.UIntValue, AutoPackType.Unpacked);
+            WriteSingle(value.x);
+            WriteSingle(value.y);
         }
 
         /// <summary>
@@ -550,13 +515,9 @@ namespace FishNet.Serializing
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteVector3(Vector3 value)
         {
-            UIntFloat converter;
-            converter = new UIntFloat { FloatValue = value.x };
-            WriteUInt32(converter.UIntValue, AutoPackType.Unpacked);
-            converter = new UIntFloat { FloatValue = value.y };
-            WriteUInt32(converter.UIntValue, AutoPackType.Unpacked);
-            converter = new UIntFloat { FloatValue = value.z };
-            WriteUInt32(converter.UIntValue, AutoPackType.Unpacked);
+            WriteSingle(value.x);
+            WriteSingle(value.y);
+            WriteSingle(value.z);
         }
 
         /// <summary>
@@ -566,15 +527,11 @@ namespace FishNet.Serializing
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteVector4(Vector4 value)
         {
-            UIntFloat converter;
-            converter = new UIntFloat { FloatValue = value.x };
-            WriteUInt32(converter.UIntValue, AutoPackType.Unpacked);
-            converter = new UIntFloat { FloatValue = value.y };
-            WriteUInt32(converter.UIntValue, AutoPackType.Unpacked);
-            converter = new UIntFloat { FloatValue = value.z };
-            WriteUInt32(converter.UIntValue, AutoPackType.Unpacked);
-            converter = new UIntFloat { FloatValue = value.w };
-            WriteUInt32(converter.UIntValue, AutoPackType.Unpacked);
+            WriteSingle(value.x);
+            WriteSingle(value.y);
+            WriteSingle(value.z);
+            WriteSingle(value.w);
+
         }
 
         /// <summary>
@@ -985,7 +942,7 @@ namespace FishNet.Serializing
         public void WriteNetworkConnection(NetworkConnection connection)
         {
             int value = (connection == null) ? NetworkConnection.UNSET_CLIENTID_VALUE : connection.ClientId;
-            WriteInt16((short)value);
+            WriteNetworkConnectionId(value);
         }
 
         /// <summary>
@@ -994,9 +951,9 @@ namespace FishNet.Serializing
         /// <returns></returns>
         [NotSerializer]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteNetworkConnectionId(short id)
+        public void WriteNetworkConnectionId(int id)
         {
-            WriteInt16(id);
+            WriteInt32(id);
         }
 
         /// <summary>
@@ -1170,7 +1127,7 @@ namespace FishNet.Serializing
                 WriteList<T>(value, offset, value.Count - offset);
         }
 
-#if !PREDICTION_V2
+#if PREDICTION_1
         /// <summary>
         /// Writes a replication to the server.
         /// </summary>

@@ -20,43 +20,12 @@ using UnityEngine;
 //Required for internal tests.
 [assembly: InternalsVisibleTo(UtilityConstants.TEST_ASSEMBLY_NAME)]
 namespace FishNet.Serializing
-{
-    /// <summary>
-    /// Used for read references to generic types.
-    /// </summary>
-    /// <typeparam name="T"></typeparam>
-    [APIExclude]
-    public static class GenericReader<T>
-    {
-        public static Func<Reader, T> Read {  get; set; }
-        public static Func<Reader, AutoPackType, T> ReadAutoPack { get; set; }
-        /// <summary>
-        /// True if this type has a custom writer.
-        /// </summary>
-        private static bool _hasCustomSerializer;
-
-        public static void SetReadUnpacked(Func<Reader, T> value)
-        {
-            /* If a custom serializer has already been set then exit method
-             * to not overwrite serializer. */
-            if (_hasCustomSerializer)
-                return;
-
-            //Set has custom serializer if value being used is not a generated method.
-            _hasCustomSerializer = !(value.Method.Name.StartsWith(UtilityConstants.GENERATED_READER_PREFIX));
-            Read = value;
-        }
-   
-        public static void SetReadAutoPacked(Func<Reader, AutoPackType, T> value)
-        {
-            ReadAutoPack = value;
-        }
-    }
+{  
 
     /// <summary>
     /// Reads data from a buffer.
     /// </summary>
-    public class Reader
+    public partial class Reader
     {
         #region Types.
         public enum DataSource
@@ -1102,7 +1071,7 @@ namespace FishNet.Serializing
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadNetworkConnectionId()
         {
-            return ReadInt16();
+            return ReadInt32();
         }
 
         /// <summary>
@@ -1280,7 +1249,7 @@ namespace FishNet.Serializing
         #endregion
 
         #region Generators.
-#if !PREDICTION_V2
+#if PREDICTION_1
         /// <summary>
         /// Reads a replicate into collection and returns item count read.
         /// </summary>

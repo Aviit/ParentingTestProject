@@ -16,10 +16,12 @@ using System.Runtime.CompilerServices;
 using UnityEngine;
 using UnityEngine.Scripting;
 using UnityEngine.Serialization;
+using static FishNet.Component.Transforming.NetworkTransform;
 using static FishNet.Object.NetworkObject;
 
 namespace FishNet.Component.Transforming
 {
+
     [DisallowMultipleComponent]
     [AddComponentMenu("FishNet/Component/NetworkTransform")]
     public sealed class NetworkTransform : NetworkBehaviour
@@ -336,6 +338,10 @@ namespace FishNet.Component.Transforming
         /// True if the local client used TakeOwnership and is awaiting an ownership change.
         /// </summary>
         public bool TakenOwnership { get; private set; }
+        /// <summary>
+        /// NetworkBehaviour this transform is a child of.
+        /// </summary>
+        public NetworkBehaviour ParentBehaviour { get; private set; }
         #endregion
 
         #region Serialized.
@@ -519,10 +525,6 @@ namespace FishNet.Component.Transforming
         /// </summary>
         private bool _lastReceiveReliable = true;
         /// <summary>
-        /// NetworkBehaviour this transform is a child of.
-        /// </summary>
-        private NetworkBehaviour _parentBehaviour;
-        /// <summary>
         /// Last transform which this object was a child of.
         /// </summary>
         private Transform _parentTransform;
@@ -662,6 +664,8 @@ namespace FishNet.Component.Transforming
             _intervalsRemaining = 0;
             //Reset last tick since each client sends their own ticks.
             _lastServerRpcTick = 0;
+
+            TryClearGoalDatas_OwnershipChange(prevOwner, true);
         }
 
         public override void OnOwnershipClient(NetworkConnection prevOwner)
@@ -688,17 +692,46 @@ namespace FishNet.Component.Transforming
                 if (!base.IsServerInitialized)
                     ChangeTickSubscription(false);
             }
+
+            TryClearGoalDatas_OwnershipChange(prevOwner, false);
+        }
+
+        /// <summary>
+        /// Tries to clear the GoalDatas queue during an ownership change.
+        /// </summary>
+        private void TryClearGoalDatas_OwnershipChange(NetworkConnection prevOwner, bool asServer)
+        {
+            if (_clientAuthoritative)
+            {
+                //If not server
+                if (!asServer)
+                {
+                    //If owner now then clear as the owner controls the object now and shouldnt use past datas.
+                    if (base.IsOwner)
+                        _goalDataQueue.Clear();
+                }
+                //as Server.
+                else
+                {
+                    //If new owner is valid then clear to allow new owner datas.
+                    if (base.Owner.IsValid)
+                        _goalDataQueue.Clear();
+                }
+            }
+            /* Server authoritative never clears because the
+             * clients do not control this object thus should always
+             * follow the queue. */
         }
 
         public override void OnStopNetwork()
         {
-            ResetState(false);
+            ResetState();
         }
 
         /// <summary>
         /// Deinitializes this component.
         /// </summary>
-        private void ResetState(bool destroyed)
+        private void ResetState()
         {
             ChangeTickSubscription(false);
             /* Reset server and client side since this is called from
@@ -1067,7 +1100,7 @@ namespace FishNet.Component.Transforming
                     else
                     {
                         _parentTransform = transform.parent;
-                        _parentBehaviour = parentBehaviour;
+                        ParentBehaviour = parentBehaviour;
                     }
                 }
             }
@@ -1266,10 +1299,10 @@ namespace FishNet.Component.Transforming
                 }
 
                 //Childed.
-                if (ChangedContains(changed, ChangedDelta.Childed) && _parentBehaviour != null)
+                if (ChangedContains(changed, ChangedDelta.Childed) && ParentBehaviour != null)
                 {
                     flagsB |= UpdateFlagB.Child;
-                    writer.WriteNetworkBehaviour(_parentBehaviour);
+                    writer.WriteNetworkBehaviour(ParentBehaviour);
                 }
 
                 writer.FastInsertByte((byte)flagsB, startIndexB);
@@ -1428,7 +1461,7 @@ namespace FishNet.Component.Transforming
                 if (base.NetworkObject.RuntimeParentNetworkBehaviour != null)
                     Debug.LogWarning($"{gameObject.name} parent object was removed without calling UnsetParent. Use networkObject.UnsetParent() to remove a NetworkObject from it's parent. This is being made a requirement in Fish-Networking v4.");
 
-                _parentBehaviour = null;
+                ParentBehaviour = null;
                 _parentTransform = null;
             }
             //Has a parent, see if eligible.
@@ -1439,15 +1472,18 @@ namespace FishNet.Component.Transforming
                     return;
 
                 _parentTransform = parent;
-                parent.TryGetComponent<NetworkBehaviour>(out _parentBehaviour);
-                if (_parentBehaviour == null)
+                NetworkBehaviour outParentBehaviour;
+                parent.TryGetComponent<NetworkBehaviour>(out outParentBehaviour);
+                if (ParentBehaviour == null)
                 {
+                    ParentBehaviour = null;
                     LogInvalidParent();
                 }
                 else
                 {
+                    ParentBehaviour = outParentBehaviour;
                     //Check for being set without using nob.SetParent.
-                    if (base.NetworkObject.CurrentParentNetworkBehaviour != _parentBehaviour)
+                    if (base.NetworkObject.CurrentParentNetworkBehaviour != ParentBehaviour)
                         Debug.LogWarning($"{gameObject.name} parent was set without calling SetParent. Use networkObject.SetParent(obj) to assign a NetworkObject a new parent. This is being made a requirement in Fish-Networking v4.");
                 }
             }
@@ -1680,7 +1716,7 @@ namespace FishNet.Component.Transforming
                     Transform t = transform;
                     /* If here a send for transform values will occur. Update last values.
                      * Tick doesn't need to be set for whoever controls transform. */
-                    lastSentData.Update(0, t.localPosition, t.localRotation, t.localScale, t.localPosition, _parentBehaviour);
+                    lastSentData.Update(0, t.localPosition, t.localRotation, t.localScale, t.localPosition, ParentBehaviour);
 
                     SerializeChanged(changed, writer, lodIndex);
                 }
@@ -1785,7 +1821,7 @@ namespace FishNet.Component.Transforming
             /* If here a send for transform values will occur. Update last values.
             * Tick doesn't need to be set for whoever controls transform. */
             Transform t = transform;
-            lastSentTransformData.Update(0, t.localPosition, t.localRotation, t.localScale, t.localPosition, _parentBehaviour);
+            lastSentTransformData.Update(0, t.localPosition, t.localRotation, t.localScale, t.localPosition, ParentBehaviour);
 
             //Send latest.
             PooledWriter writer = WriterPool.Retrieve();
@@ -1897,7 +1933,7 @@ namespace FishNet.Component.Transforming
                 changed |= ChangedDelta.ScaleZ;
 
             //if (lastParentBehaviour != _parentBehaviour)
-            if (_parentBehaviour != null)
+            if (ParentBehaviour != null)
                 changed |= ChangedDelta.Childed;
 
             //If added scale or childed then also add extended.
@@ -2428,7 +2464,7 @@ namespace FishNet.Component.Transforming
             nextTransformData.Tick = base.TimeManager.LastPacketTick.LastRemoteTick;
         }
 
-#if PREDICTION_V2
+#if !PREDICTION_1
         /// <summary>
         /// Configures this NetworkTransform for CSP.
         /// </summary>

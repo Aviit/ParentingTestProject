@@ -210,14 +210,14 @@ namespace FishNet.Managing.Timing
         /// </summary>
         [Tooltip("While true clients may drop local ticks if their devices are unable to maintain the tick rate. This could result in a temporary desynchronization but will prevent the client falling further behind on ticks by repeatedly running the logic cycle multiple times per frame.")]
         [SerializeField]
-        private bool _allowTickDropping;
+        private bool _allowTickDropping = true;
         /// <summary>
         /// Maximum number of ticks which may occur in a single frame before remainder are dropped for the frame.
         /// </summary>
         [Tooltip("Maximum number of ticks which may occur in a single frame before remainder are dropped for the frame.")]
         [Range(1, 25)]
         [SerializeField]
-        private byte _maximumFrameTicks = 2;
+        private byte _maximumFrameTicks = 3;
         /// <summary>
         /// 
         /// </summary>
@@ -719,7 +719,7 @@ namespace FishNet.Managing.Timing
 
                 if (frameTicked)
                 {
-#if PREDICTION_V2
+#if !PREDICTION_1
                     //Tell predicted objecs to reconcile before OnTick.
                     NetworkManager.PredictionManager.ReconcileToStates();
 #endif
@@ -735,7 +735,7 @@ namespace FishNet.Managing.Timing
                     }
 
                     OnPostTick?.Invoke();
-#if PREDICTION_V2
+#if !PREDICTION_1
                     //After post tick send states.
                     NetworkManager.PredictionManager.SendStateUpdate();
 #endif
@@ -1139,22 +1139,22 @@ namespace FishNet.Managing.Timing
             ////Do not change timing if client is slowing down due to latency issues.
             //if (Time.unscaledTime - NetworkManager.PredictionManager.SlowDownTime > 3f)
             //{
-                //Pefect!
-                if (tickDifference == 0) { }
-                //Difference is extreme, reset to default timings. Client probably had an issue.
-                else if (Mathf.Abs(tickDifference) > maximumDifference)
-                {
-                    _adjustedTickDelta = TickDelta;
-                }
-                //Otherwise adjust the delta marginally.
-                else
-                {
-                    /* A negative tickDifference indicates the client is
-                     * moving too fast, while positive indicates too slow. */
-                    bool speedUp = (tickDifference > 0);
-                    ChangeAdjustedTickDelta(speedUp);
-                }
-          //  }
+            //Pefect!
+            if (tickDifference == 0) { }
+            //Difference is extreme, reset to default timings. Client probably had an issue.
+            else if (Mathf.Abs(tickDifference) > maximumDifference)
+            {
+                _adjustedTickDelta = TickDelta;
+            }
+            //Otherwise adjust the delta marginally.
+            else
+            {
+                /* A negative tickDifference indicates the client is
+                 * moving too fast, while positive indicates too slow. */
+                bool speedUp = (tickDifference > 0);
+                ChangeAdjustedTickDelta(speedUp);
+            }
+            //  }
             //Recalculates Tick value if it exceeds maximum difference.
             void TryRecalculateTick()
             {
